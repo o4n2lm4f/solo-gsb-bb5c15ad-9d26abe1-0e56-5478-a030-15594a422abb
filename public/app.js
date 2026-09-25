@@ -1768,7 +1768,8 @@ function renderCuttingResult() {
   info.className = 'cutting-layout';
   info.textContent = `印张实际输出尺寸 ${fmtMm(layout.sheet.widthMm)} × ${fmtMm(layout.sheet.heightMm)}`
     + `；需要 ${requiredSheets} 个印张。下方方案均由可执行的直线贯通裁切树生成`
-    + '（非面积估算，印张之间无重叠），按所需原纸张数、废料面积依次推荐。';
+    + '（非面积估算，印张之间无重叠；印张小于料件处自动补刀分离边料并标为废料，'
+    + '贴边时零刀线），按所需原纸张数、废料面积依次推荐。';
   cuttingResultEl.appendChild(info);
 
   if (!cuttingData.feasible) {
@@ -1909,12 +1910,49 @@ function buildCuttingDiagram(opt) {
   svg.setAttribute('aria-label',
     `${opt.name} 裁切图：${frameW} × ${frameH} mm 原纸，每张裁出 ${opt.yieldsPerSheet} 个印张`);
 
+  // 废料斜纹图案（viewBox 随图缩放，pattern 用 userSpaceOnUse 保持纹路粗细）
+  const hatchId = `cut-waste-hatch-${opt.index}`;
+  const defs = document.createElementNS(svgNS, 'defs');
+  const pattern = document.createElementNS(svgNS, 'pattern');
+  pattern.setAttribute('id', hatchId);
+  pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+  pattern.setAttribute('width', '8');
+  pattern.setAttribute('height', '8');
+  pattern.setAttribute('patternTransform', 'rotate(45)');
+  const hatch = document.createElementNS(svgNS, 'line');
+  hatch.setAttribute('x1', '0'); hatch.setAttribute('y1', '0');
+  hatch.setAttribute('x2', '0'); hatch.setAttribute('y2', '8');
+  hatch.setAttribute('class', 'cut-waste-hatch-line');
+  pattern.appendChild(hatch);
+  defs.appendChild(pattern);
+  svg.appendChild(defs);
+
   // 原纸底色与边框
   const bg = document.createElementNS(svgNS, 'rect');
   bg.setAttribute('x', 0); bg.setAttribute('y', 0);
   bg.setAttribute('width', widthPx); bg.setAttribute('height', heightPx);
   bg.setAttribute('class', 'cut-paper-bg');
   svg.appendChild(bg);
+
+  // 废料（刀线分离出的边料：右侧条 / 上方条 / 整块空区）。底色与斜纹分两个
+  // rect 叠加（CSS 中 class 的 fill 会覆盖属性 fill，故斜纹不能与底色同 rect）
+  (opt.cutting.wastes || []).forEach((w) => {
+    const x = (w.xMm * pxPerMm).toFixed(2);
+    const y = (w.yMm * pxPerMm).toFixed(2);
+    const width = (w.widthMm * pxPerMm).toFixed(2);
+    const height = (w.heightMm * pxPerMm).toFixed(2);
+    const base = document.createElementNS(svgNS, 'rect');
+    base.setAttribute('x', x); base.setAttribute('y', y);
+    base.setAttribute('width', width); base.setAttribute('height', height);
+    base.setAttribute('class', 'cut-waste');
+    svg.appendChild(base);
+    const hatchRect = document.createElementNS(svgNS, 'rect');
+    hatchRect.setAttribute('x', x); hatchRect.setAttribute('y', y);
+    hatchRect.setAttribute('width', width); hatchRect.setAttribute('height', height);
+    hatchRect.setAttribute('fill', `url(#${hatchId})`);
+    hatchRect.setAttribute('stroke', 'none');
+    svg.appendChild(hatchRect);
+  });
 
   // 印张位
   opt.cutting.items.forEach((item, i) => {
@@ -1962,7 +2000,8 @@ function buildCuttingDiagram(opt) {
   caption.className = 'cutting-diagram-caption';
   caption.textContent = `裁切图（按比例）：${frameW} × ${frameH} mm，`
     + `红虚线为贯通裁切线，深色块为印张（${opt.cutting.item.widthMm} × `
-    + `${opt.cutting.item.heightMm} mm），浅色块为旋转 90° 的印张。`;
+    + `${opt.cutting.item.heightMm} mm），浅色块为旋转 90° 的印张，`
+    + '斜纹块为裁切线分离出的废料（边料）。';
   wrap.appendChild(caption);
   return wrap;
 }

@@ -916,6 +916,16 @@ main {
   fill: #1e293b;
   font-weight: 700;
 }
+.cut-waste {
+  fill: #eef2f6;
+  stroke: #94a3b8;
+  stroke-width: 0.7;
+  stroke-dasharray: 3 2;
+}
+.cut-waste-hatch-line {
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
 .cut-line {
   stroke: #dc2626;
   stroke-width: 1.4;

@@ -671,6 +671,36 @@ function parseMultipart(body, contentType) {
       assert.ok(Math.abs(it.widthMm - dims[0]) < 0.01 && Math.abs(it.heightMm - dims[1]) < 0.01);
     }
 
+    // 漏刀回归：350×250 mm 原纸裁 300×200 mm 印张（A4 竖版小册子的印张即
+    // 约 420×297，故另构 300×200 的 plan）——可行、出 1 个，但必须补出
+    // 贯通刀线把印张与边料分离（修复前 cutCount=0、占用叶覆盖整张原纸）
+    const loosePlan = {
+      sheets: [{ sheet: 1 }],
+      sourceCount: 4, paddedCount: 0, totalCount: 4, blanks: 0,
+      panel: { width: 150 * 72 / 25.4, height: 200 * 72 / 25.4, orientation: 'portrait' },
+      sheet: { width: 300 * 72 / 25.4, height: 200 * 72 / 25.4 },
+    };
+    const looseResp = await jsonRequest(server, '/api/cutting', {
+      plan: loosePlan,
+      papers: [{ name: '边料原纸', widthMm: 350, heightMm: 250, pricePerSheet: 0, setupFee: 0 }],
+      requiredSheets: 1,
+    });
+    assert.strictEqual(looseResp.status, 200);
+    const loose = JSON.parse(looseResp.body.toString());
+    const looseOpt = loose.options[0];
+    assert.strictEqual(looseOpt.feasible, true);
+    assert.strictEqual(looseOpt.yieldsPerSheet, 1);
+    assert.strictEqual(looseOpt.cutting.cutCount, 2);
+    assert.strictEqual(looseOpt.cutting.cuts.length, 2);
+    assert.strictEqual(looseOpt.cutting.items.length, 1);
+    assert.ok(looseOpt.cutting.wastes.length >= 1, '边料必须标为废料');
+    assert.ok(Math.abs(looseOpt.waste.perSheetAreaMm2 - 27500) < 0.01);
+    // 第 1 刀贯通整张原纸，第 2 刀贯通切出的子料件
+    assert.strictEqual(looseOpt.cutting.cuts[0].pieceWidthMm, 350);
+    assert.strictEqual(looseOpt.cutting.cuts[0].pieceHeightMm, 250);
+    assert.ok(looseOpt.cutting.cuts[1].pieceWidthMm < 350
+      || looseOpt.cutting.cuts[1].pieceHeightMm < 250);
+
     // 全部原纸都放不下：HTTP 200 + feasible=false + 明确原因
     const cutNoFitResp = await jsonRequest(server, '/api/cutting', {
       plan: quotePlan,
