@@ -670,6 +670,48 @@ function parseMultipart(body, contentType) {
         : [420, 297];
       assert.ok(Math.abs(it.widthMm - dims[0]) < 0.01 && Math.abs(it.heightMm - dims[1]) < 0.01);
     }
+    assert.ok(Array.isArray(cutBig.cutting.wasteRegions));
+
+    // 漏刀回归（HTTP）：350×250 原纸裁 300×200 印张必须给出贯通刀线分离边料，
+    // 边料在 wasteRegions 中；items + wasteRegions 铺满原纸
+    const trimPlan = {
+      sheets: [{ sheet: 1 }],
+      sourceCount: 4, paddedCount: 0, totalCount: 4, blanks: 0,
+      panel: { width: 150 * 72 / 25.4, height: 200 * 72 / 25.4, orientation: 'portrait' },
+      sheet: { width: 300 * 72 / 25.4, height: 200 * 72 / 25.4 },
+    };
+    const trimResp = await jsonRequest(server, '/api/cutting', {
+      plan: trimPlan,
+      papers: [{ name: '留边纸', widthMm: 350, heightMm: 250, pricePerSheet: 0, setupFee: 0 }],
+      requiredSheets: 1,
+    });
+    assert.strictEqual(trimResp.status, 200);
+    const trim = JSON.parse(trimResp.body.toString());
+    const trimOpt = trim.options[0];
+    assert.strictEqual(trimOpt.feasible, true);
+    assert.strictEqual(trimOpt.yieldsPerSheet, 1);
+    assert.strictEqual(trimOpt.cutting.cutCount, 2);
+    assert.strictEqual(trimOpt.cutting.cuts.length, 2);
+    assert.ok(trimOpt.cutting.wasteRegions.length >= 2);
+    const tiled = trimOpt.cutting.items.concat(trimOpt.cutting.wasteRegions)
+      .reduce((s, r) => s + r.widthMm * r.heightMm, 0);
+    assert.ok(Math.abs(tiled - 350 * 250) < 1, '印张与废料区域应铺满原纸');
+    // 刀序：首刀贯通整张原纸，次刀贯通切出的 350×200 料件
+    assert.strictEqual(trimOpt.cutting.cuts[0].pieceWidthMm, 350);
+    assert.strictEqual(trimOpt.cutting.cuts[0].pieceHeightMm, 250);
+    assert.strictEqual(trimOpt.cutting.cuts[1].pieceWidthMm, 350);
+    assert.strictEqual(trimOpt.cutting.cuts[1].pieceHeightMm, 200);
+
+    // 恰好贴边：0 刀、无废料区域
+    const flushResp = await jsonRequest(server, '/api/cutting', {
+      plan: trimPlan,
+      papers: [{ name: '恰好', widthMm: 300, heightMm: 200, pricePerSheet: 0, setupFee: 0 }],
+      requiredSheets: 1,
+    });
+    const flush = JSON.parse(flushResp.body.toString()).options[0];
+    assert.strictEqual(flush.cutting.cutCount, 0);
+    assert.strictEqual(flush.cutting.wasteRegions.length, 0);
+    assert.strictEqual(flush.waste.perSheetAreaMm2, 0);
 
     // 全部原纸都放不下：HTTP 200 + feasible=false + 明确原因
     const cutNoFitResp = await jsonRequest(server, '/api/cutting', {

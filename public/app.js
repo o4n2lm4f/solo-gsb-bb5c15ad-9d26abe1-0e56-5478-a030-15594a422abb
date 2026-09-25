@@ -1916,6 +1916,18 @@ function buildCuttingDiagram(opt) {
   bg.setAttribute('class', 'cut-paper-bg');
   svg.appendChild(bg);
 
+  // 废料区域（边料）：裁切后与印张分离的余料，斜纹灰色块表示
+  const wasteRegions = opt.cutting.wasteRegions || [];
+  wasteRegions.forEach((region) => {
+    const rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('x', (region.xMm * pxPerMm).toFixed(2));
+    rect.setAttribute('y', (region.yMm * pxPerMm).toFixed(2));
+    rect.setAttribute('width', (region.widthMm * pxPerMm).toFixed(2));
+    rect.setAttribute('height', (region.heightMm * pxPerMm).toFixed(2));
+    rect.setAttribute('class', 'cut-waste');
+    svg.appendChild(rect);
+  });
+
   // 印张位
   opt.cutting.items.forEach((item, i) => {
     const rect = document.createElementNS(svgNS, 'rect');
@@ -1960,9 +1972,13 @@ function buildCuttingDiagram(opt) {
 
   const caption = document.createElement('p');
   caption.className = 'cutting-diagram-caption';
+  const wasteCount = wasteRegions.length;
+  const wasteText = wasteCount > 0
+    ? `，灰色虚线块为裁切后分离的边料（废料，共 ${wasteCount} 块）`
+    : '，无废料边料';
   caption.textContent = `裁切图（按比例）：${frameW} × ${frameH} mm，`
     + `红虚线为贯通裁切线，深色块为印张（${opt.cutting.item.widthMm} × `
-    + `${opt.cutting.item.heightMm} mm），浅色块为旋转 90° 的印张。`;
+    + `${opt.cutting.item.heightMm} mm），浅色块为旋转 90° 的印张${wasteText}。`;
   wrap.appendChild(caption);
   return wrap;
 }

@@ -901,6 +901,13 @@ main {
 }
 .cut-paper-bg { fill: #f8fafc; }
 .cut-paper-frame { fill: none; stroke: #334155; stroke-width: 1.6; }
+.cut-waste {
+  fill: #e7e5e4;
+  fill-opacity: 0.6;
+  stroke: #a8a29e;
+  stroke-width: 0.6;
+  stroke-dasharray: 3 2;
+}
 .cut-item {
   fill: #cfe2f8;
   stroke: #2f5f9e;
